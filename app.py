@@ -1,14 +1,25 @@
 import os
 import telebot
-import requests
+from flask import Flask, request
 
 # Get environment variables (API keys, tokens, and channel ID)
-bot_token = os.getenv('TELEGRAM_BOT_TOKEN')  # Store in Render environment
-tmdb_api_key = os.getenv('TMDB_API_KEY')    # Store in Render environment
-channel_id = os.getenv('CHANNEL_ID')        # Store in Render environment
+bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+tmdb_api_key = os.getenv('TMDB_API_KEY')
+channel_id = os.getenv('CHANNEL_ID')
 
 # Initialize the Telegram bot
 bot = telebot.TeleBot(bot_token)
+
+# Create a Flask app
+app = Flask(__name__)
+
+# Webhook endpoint
+@app.route(f"/{bot_token}", methods=["POST"])
+def webhook():
+    json_update = request.get_json()
+    update = telebot.types.Update.de_json(json_update)
+    bot.process_new_updates([update])
+    return '', 200
 
 # Function to get the titles of the 3 latest upcoming Hindi movies
 def get_latest_hindi_movies():
@@ -17,10 +28,9 @@ def get_latest_hindi_movies():
     data = response.json()
 
     if 'results' in data and len(data['results']) > 0:
-        # Extract the titles of the first 3 movies
-        movies = data['results'][:3]  # Get only the first 3 results
+        movies = data['results'][:3]
         movie_titles = [movie['title'] for movie in movies]
-        return ', '.join(movie_titles)  # Join the titles with commas
+        return ', '.join(movie_titles)
     return None
 
 # Function to change the channel name
@@ -31,7 +41,7 @@ def change_channel_name(new_name):
     except Exception as e:
         print(f"Failed to change channel name: {e}")
 
-# Main function to update the channel name
+# Function to update the channel name
 def update_channel_name():
     movie_names = get_latest_hindi_movies()
     if movie_names:
@@ -39,6 +49,14 @@ def update_channel_name():
     else:
         print("No upcoming Hindi movies found.")
 
-# Call the function to update the channel name
-if __name__ == "__main__":
+# Call the function to update the channel name at startup
+@app.route('/update_channel', methods=['GET'])
+def update_channel():
     update_channel_name()
+    return "Channel name updated!", 200
+
+# Set the webhook with your public URL and port
+if __name__ == "__main__":
+    bot.remove_webhook()
+    bot.set_webhook(url=f"https://<your_render_service>.render.com/{bot_token}")
+    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
