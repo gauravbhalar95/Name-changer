@@ -32,6 +32,7 @@ def get_latest_hindi_movies():
 
 # Function to change the channel name
 def change_channel_name(new_name):
+    print(f"Attempting to change channel name to: {new_name}")
     try:
         bot.set_chat_title(chat_id=channel_id, title=new_name)
         print(f"Channel name changed to: {new_name}")
@@ -43,6 +44,8 @@ def update_channel_name():
     movie_names = get_latest_hindi_movies()
     if movie_names:
         change_channel_name(movie_names)
+    else:
+        print("No upcoming Hindi movies found.")
 
 # Webhook endpoint
 @app.route(f"/{bot_token}", methods=["POST"])
@@ -50,6 +53,9 @@ def webhook():
     json_update = request.get_json()
     update = telebot.types.Update.de_json(json_update)
     bot.process_new_updates([update])
+    
+    # Call to update the channel name after processing updates
+    update_channel_name()  
     return '', 200
 
 # Function to set the webhook
