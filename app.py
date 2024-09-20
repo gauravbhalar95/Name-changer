@@ -1,5 +1,6 @@
 import os
 import telebot
+import requests
 from flask import Flask, request
 
 # Get environment variables (API keys, tokens, and channel ID)
@@ -12,14 +13,6 @@ bot = telebot.TeleBot(bot_token)
 
 # Create a Flask app
 app = Flask(__name__)
-
-# Webhook endpoint
-@app.route(f"/{bot_token}", methods=["POST"])
-def webhook():
-    json_update = request.get_json()
-    update = telebot.types.Update.de_json(json_update)
-    bot.process_new_updates([update])
-    return '', 200
 
 # Function to get the titles of the 3 latest upcoming Hindi movies
 def get_latest_hindi_movies():
@@ -49,14 +42,34 @@ def update_channel_name():
     else:
         print("No upcoming Hindi movies found.")
 
-# Call the function to update the channel name at startup
-@app.route('/update_channel', methods=['GET'])
-def update_channel():
-    update_channel_name()
-    return "Channel name updated!", 200
+# Webhook endpoint
+@app.route(f"/{bot_token}", methods=["POST"])
+def webhook():
+    json_update = request.get_json()
+    update = telebot.types.Update.de_json(json_update)
+    bot.process_new_updates([update])
+    return '', 200
 
-# Set the webhook with your public URL and port
+# Function to set the webhook
+def set_webhook():
+    webhook_url = f"https://name-changer-jt9r.onrender.com/{bot_token}"
+    response = requests.post(f"https://api.telegram.org/bot{bot_token}/setWebhook", data={"url": webhook_url})
+
+    if response.status_code == 200:
+        print("Webhook set successfully!")
+    else:
+        print("Failed to set webhook:", response.json())
+
+# Function to remove existing webhook
+def remove_webhook():
+    response = requests.post(f"https://api.telegram.org/bot{bot_token}/deleteWebhook")
+    if response.status_code == 200:
+        print("Webhook removed successfully!")
+    else:
+        print("Failed to remove webhook:", response.json())
+
+# Set the webhook on startup
 if __name__ == "__main__":
-    bot.remove_webhook()
-    bot.set_webhook(url=f"https://name-changer-jt9r.onrender.com/{bot_token}")
+    remove_webhook()  # Remove any existing webhook
+    set_webhook()     # Set the new webhook
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
