@@ -14,11 +14,17 @@ bot = telebot.TeleBot(bot_token)
 # Create a Flask app
 app = Flask(__name__)
 
-# Function to get the latest Hindi movies
+# Health check route
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+# Function to get the titles of the 3 latest upcoming Hindi movies
 def get_latest_hindi_movies():
     url = f"https://api.themoviedb.org/3/movie/upcoming?api_key={tmdb_api_key}&language=hi-IN&page=1"
     response = requests.get(url)
     data = response.json()
+
     if 'results' in data and len(data['results']) > 0:
         movies = data['results'][:3]
         return ', '.join(movie['title'] for movie in movies)
@@ -46,16 +52,17 @@ def webhook():
     bot.process_new_updates([update])
     return '', 200
 
-# Set the webhook
+# Function to set the webhook
 def set_webhook():
-    webhook_url = f"https://name-changer-jt9r.onrender.com+'/'+{bot_token}"
+    webhook_url = f"https://name-changer-jt9r.onrender.com/{bot_token}"
     response = requests.post(f"https://api.telegram.org/bot{bot_token}/setWebhook", data={"url": webhook_url})
+
     if response.status_code == 200:
         print("Webhook set successfully!")
     else:
         print("Failed to set webhook:", response.json())
 
-# Remove existing webhook
+# Function to remove existing webhook
 def remove_webhook():
     response = requests.post(f"https://api.telegram.org/bot{bot_token}/deleteWebhook")
     if response.status_code == 200:
