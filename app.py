@@ -58,5 +58,5 @@ def update_channel():
 # Set the webhook with your public URL and port
 if __name__ == "__main__":
     bot.remove_webhook()
-    bot.set_webhook(url=f"https://<your_render_service>.render.com/{bot_token}")
+    bot.set_webhook(url=f"https://name-changer-jt9r.onrender.com/{bot_token}")
     app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
