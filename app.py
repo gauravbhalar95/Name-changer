@@ -1,81 +1,92 @@
 import os
 import telebot
 import requests
+import json
 from flask import Flask, request
 
-# Get environment variables
-bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
-tmdb_api_key = os.getenv('TMDB_API_KEY')
-channel_id = os.getenv('CHANNEL_ID')
-
-# Initialize the Telegram bot
-bot = telebot.TeleBot(bot_token)
-
-# Create a Flask app
+# Initialize Flask app
 app = Flask(__name__)
 
-# Health check route
-@app.route('/')
-def home():
-    return "Bot is running!"
+# Use environment variables for bot token and API key
+bot_token = os.getenv('BOT_TOKEN')
+tmdb_api_key = os.getenv('TMDB_API_KEY')
+channel_id = os.getenv('CHANNEL_ID')
+webhook_url = os.getenv('WEBHOOK_URL')
 
-# Function to get the titles of the 3 latest upcoming Hindi movies
-def get_latest_hindi_movies():
+bot = telebot.TeleBot(bot_token)
+
+# Function to get the name of the latest upcoming movie
+def get_latest_movie():
     url = f"https://api.themoviedb.org/3/movie/upcoming?api_key={tmdb_api_key}&language=hi-IN&page=1"
     response = requests.get(url)
     data = response.json()
 
     if 'results' in data and len(data['results']) > 0:
-        movies = data['results'][:3]
-        return ', '.join(movie['title'] for movie in movies)
+        latest_movie = data['results'][0]
+        movie_title = latest_movie['title']
+        return movie_title
     return None
+
+# Function to get the current channel name
+def get_channel_name():
+    try:
+        chat = bot.get_chat(chat_id=channel_id)
+        return chat.title
+    except Exception as e:
+        print(f"Failed to get channel name: {e}")
+        return None
+
+# Function to change the channel name to append the latest movie, separated by commas
+def update_channel_name_with_movie():
+    movie_name = get_latest_movie()
+    if movie_name:
+        current_name = get_channel_name()
+        if current_name:
+            # Check if movie name is already in the channel title, to avoid duplicates
+            if movie_name not in current_name:
+                new_name = f"{current_name}, {movie_name}" if current_name else movie_name
+                change_channel_name(new_name)
+            else:
+                print(f"The movie '{movie_name}' is already in the channel name.")
+        else:
+            change_channel_name(movie_name)
+    else:
+        print("No upcoming movie found.")
 
 # Function to change the channel name
 def change_channel_name(new_name):
-    print(f"Attempting to change channel name to: {new_name}")
     try:
         bot.set_chat_title(chat_id=channel_id, title=new_name)
         print(f"Channel name changed to: {new_name}")
     except Exception as e:
         print(f"Failed to change channel name: {e}")
 
-# Update channel name function
-def update_channel_name():
-    movie_names = get_latest_hindi_movies()
-    if movie_names:
-        change_channel_name(movie_names)
-    else:
-        print("No upcoming Hindi movies found.")
-
-# Webhook endpoint
-@app.route(f"/{bot_token}", methods=["POST"])
+# Set webhook for bot deployment
+@app.route('/' + bot_token, methods=['POST'])
 def webhook():
-    json_update = request.get_json()
-    update = telebot.types.Update.de_json(json_update)
+    json_str = request.get_data().decode('UTF-8')
+    update = telebot.types.Update.de_json(json_str)
     bot.process_new_updates([update])
-    
-    # Call to update the channel name after processing updates
-    update_channel_name()  
-    return '', 200
+    return "Webhook received!", 200
 
-# Function to set the webhook
+# Main route for testing the Flask app
+@app.route('/')
+def index():
+    return "Bot is running!", 200
+
+# Set the webhook when the app starts
+@app.before_first_request
 def set_webhook():
-    webhook_url = f"https://name-changer-jt9r.onrender.com/{bot_token}"
-    response = requests.post(f"https://api.telegram.org/bot{bot_token}/setWebhook", data={"url": webhook_url})
+    bot.remove_webhook()
+    bot.set_webhook(url=f"{webhook_url}/{bot_token}")
 
-    if response.status_code == 200:
-        print("Webhook set successfully!")
-    else:
-        print("Failed to set webhook:", response.json())
+# Schedule this function to run periodically or trigger manually
+@app.route('/update_channel_name', methods=['GET'])
+def trigger_update():
+    update_channel_name_with_movie()
+    return "Channel name update triggered!", 200
 
-# Function to remove existing webhook
-def remove_webhook():
-    response = requests.post(f"https://api.telegram.org/bot{bot_token}/deleteWebhook")
-    if response.status_code == 200:
-        print("Webhook removed successfully!")
-
-# Main execution
+# Start the Flask server
 if __name__ == "__main__":
-    remove_webhook()  # Remove any existing webhook
-    set_webhook()     # Set the new webhook
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
