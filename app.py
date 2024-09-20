@@ -48,7 +48,7 @@ def webhook():
 
 # Set the webhook
 def set_webhook():
-    webhook_url = f"https://name-changer-jt9r.onrender.com/{bot_token}"
+    webhook_url = f"https://name-changer-jt9r.onrender.com/+{bot_token}"
     response = requests.post(f"https://api.telegram.org/bot{bot_token}/setWebhook", data={"url": webhook_url})
     if response.status_code == 200:
         print("Webhook set successfully!")
