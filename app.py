@@ -1,6 +1,7 @@
 from flask import Flask
 import telebot
 import requests
+import os
 
 # Your Telegram bot token
 bot_token = os.getenv('BOT_TOKEN')
