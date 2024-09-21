@@ -8,10 +8,10 @@ from flask import Flask, request
 app = Flask(__name__)
 
 # Use environment variables for bot token and API key
-bot_token = os.getenv('BOT_TOKEN')
-tmdb_api_key = os.getenv('TMDB_API_KEY')
-channel_id = os.getenv('CHANNEL_ID')
-webhook_url = os.getenv('WEBHOOK_URL')
+bot_token = os.getenv('BOT_TOKEN', 'your_default_bot_token')
+tmdb_api_key = os.getenv('TMDB_API_KEY', 'your_default_tmdb_api_key')
+channel_id = os.getenv('CHANNEL_ID', 'your_default_channel_id')
+webhook_url = os.getenv('WEBHOOK_URL', 'your_default_webhook_url')
 
 bot = telebot.TeleBot(bot_token)
 
@@ -24,13 +24,16 @@ def get_latest_movie():
     if 'results' in data and len(data['results']) > 0:
         latest_movie = data['results'][0]
         movie_title = latest_movie['title']
+        print(f"Latest movie found: {movie_title}")
         return movie_title
+    print("No upcoming movies found.")
     return None
 
 # Function to get the current channel name
 def get_channel_name():
     try:
         chat = bot.get_chat(chat_id=channel_id)
+        print(f"Current channel name: {chat.title}")
         return chat.title
     except Exception as e:
         print(f"Failed to get channel name: {e}")
@@ -45,6 +48,7 @@ def update_channel_name_with_movie():
             # Check if movie name is already in the channel title, to avoid duplicates
             if movie_name not in current_name:
                 new_name = f"{current_name}, {movie_name}" if current_name else movie_name
+                print(f"Updating channel name to: {new_name}")
                 change_channel_name(new_name)
             else:
                 print(f"The movie '{movie_name}' is already in the channel name.")
