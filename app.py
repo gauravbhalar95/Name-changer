@@ -74,19 +74,19 @@ def webhook():
 def index():
     return "Bot is running!", 200
 
-# Set the webhook when the app starts
-@app.before_first_request
-def set_webhook():
-    bot.remove_webhook()
-    bot.set_webhook(url=f"{webhook_url}/{bot_token}")
-
-# Schedule this function to run periodically or trigger manually
+# Route to manually trigger channel name update
 @app.route('/update_channel_name', methods=['GET'])
 def trigger_update():
     update_channel_name_with_movie()
     return "Channel name update triggered!", 200
 
-# Start the Flask server
+# Start the Flask server and set webhook before the first request
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
+    
+    # Remove existing webhook and set the new one
+    bot.remove_webhook()
+    bot.set_webhook(url=f"{webhook_url}/{bot_token}")
+    
+    # Start the Flask server
     app.run(host='0.0.0.0', port=port)
