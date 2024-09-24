@@ -18,15 +18,21 @@ app = Flask(__name__)
 
 # Function to get the names of the first 3 upcoming movies
 def get_upcoming_movies():
-    url = f"https://api.themoviedb.org/3/movie/upcoming?api_key={tmdb_api_key}&language=hi-IN&page=1"
-    response = requests.get(url)
-    data = response.json()
+    try:
+        url = f"https://api.themoviedb.org/3/movie/upcoming?api_key={tmdb_api_key}&language=hi-IN&page=1"
+        response = requests.get(url)
+        data = response.json()
 
-    if 'results' in data and len(data['results']) > 0:
-        # Get the titles of the first 3 movies
-        upcoming_movies = [movie['title'] for movie in data['results'][:3]]
-        return ', '.join(upcoming_movies)  # Combine movie names with a comma separator
-    return None
+        if 'results' in data and len(data['results']) > 0:
+            # Get the titles of the first 3 movies
+            upcoming_movies = [movie['title'] for movie in data['results'][:3]]
+            print(f"Upcoming movies: {upcoming_movies}")
+            return ', '.join(upcoming_movies)  # Combine movie names with a comma separator
+        print("No upcoming movies found in the TMDb response.")
+        return None
+    except Exception as e:
+        print(f"Error fetching upcoming movies: {e}")
+        return None
 
 # Function to change the channel name
 def change_channel_name(new_name):
@@ -40,7 +46,7 @@ def change_channel_name(new_name):
 
 # Flask route to trigger the channel name update
 @app.route('/update_channel', methods=['GET'])
-def update_channel_name():
+def update_channel_name_route():
     movie_names = get_upcoming_movies()
     if movie_names:
         success = change_channel_name(movie_names)
@@ -50,11 +56,11 @@ def update_channel_name():
             return jsonify({"status": "error", "message": "Failed to change channel name"}), 500
     return jsonify({"status": "error", "message": "No upcoming movies found"}), 404
 
-# Flask route to bind the app to a port
+# Flask route to check if the app is running
 @app.route('/')
 def home():
     return "Bot is running!"
 
 if __name__ == "__main__":
-    # Bind Flask app to port 5000 or any other port
+    print("Starting Flask app...")
     app.run(host='0.0.0.0', port=5000)
