@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 import telebot
 import requests
 import os
@@ -33,16 +33,22 @@ def change_channel_name(new_name):
     try:
         bot.set_chat_title(chat_id=channel_id, title=new_name)
         print(f"Channel name changed to: {new_name}")
+        return True
     except Exception as e:
         print(f"Failed to change channel name: {e}")
+        return False
 
-# Main function to update the channel name
+# Flask route to trigger the channel name update
+@app.route('/update_channel', methods=['GET'])
 def update_channel_name():
     movie_names = get_upcoming_movies()
     if movie_names:
-        change_channel_name(movie_names)
-    else:
-        print("No upcoming movies found.")
+        success = change_channel_name(movie_names)
+        if success:
+            return jsonify({"status": "success", "message": f"Channel name changed to: {movie_names}"})
+        else:
+            return jsonify({"status": "error", "message": "Failed to change channel name"}), 500
+    return jsonify({"status": "error", "message": "No upcoming movies found"}), 404
 
 # Flask route to bind the app to a port
 @app.route('/')
@@ -50,6 +56,5 @@ def home():
     return "Bot is running!"
 
 if __name__ == "__main__":
-    update_channel_name()  # Update the channel name on startup
     # Bind Flask app to port 5000 or any other port
     app.run(host='0.0.0.0', port=5000)
