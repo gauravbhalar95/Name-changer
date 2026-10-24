@@ -74,8 +74,8 @@ if bot:
     @bot.message_handler(commands=["update"])
     def update_command(message):
         admin_id = os.getenv("ADMIN_USER_ID")
-        if admin_id and str(message.from_user.id) != admin_id:
-            bot.reply_to(message, "You are not authorized to run this command.")
+        if not admin_id or str(message.from_user.id) != admin_id:
+            bot.reply_to(message, "This command is restricted to the configured administrator.")
             return
         success = update_channel_name()
         bot.reply_to(
