@@ -5,6 +5,12 @@
       "maxDuration": 30
     }
   },
+  "crons": [
+    {
+      "path": "/api/index",
+      "schedule": "0 4 * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/webhook", "destination": "/api/index" },
     { "source": "/health", "destination": "/api/index" },
