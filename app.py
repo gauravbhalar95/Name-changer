@@ -1,63 +1,122 @@
+import logging
 import os
-import telebot
+
 import requests
-from flask import Flask
+import telebot
+from flask import Flask, jsonify, request
 
-# Load environment variables
-bot_token = os.getenv('BOT_TOKEN')  # Store your bot token in an environment variable
-tmdb_api_key = os.getenv('TMDB_API_KEY')  # Store your TMDB API key in an environment variable
-channel_id = os.getenv('CHANNEL_ID')  # Store your channel ID in an environment variable
-port = int(os.getenv('PORT', 5000))  # Use environment variable for the port (default is 5000)
-webhook_url = os.getenv('WEBHOOK_URL')  # Webhook URL for the bot
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+logger = logging.getLogger(__name__)
 
-bot = telebot.TeleBot(bot_token)
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+TMDB_API_KEY = os.getenv("TMDB_API_KEY")
+CHANNEL_ID = os.getenv("CHANNEL_ID")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
+TMDB_LANGUAGE = os.getenv("TMDB_LANGUAGE", "hi-IN")
+
 app = Flask(__name__)
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False) if BOT_TOKEN else None
 
-# Function to get the names of the first 3 upcoming movies
-def get_latest_movies():
-    url = f"https://api.themoviedb.org/3/movie/upcoming?api_key={tmdb_api_key}&language=hi-IN&page=1"
-    response = requests.get(url)
-    data = response.json()
 
-    if 'results' in data and len(data['results']) > 0:
-        # Get the first 3 movies
-        upcoming_movies = [movie['title'] for movie in data['results'][:3]]
-        return ', '.join(upcoming_movies)  # Join movie titles with a comma
-    return None
-
-# Function to change the channel name
-def change_channel_name(new_name):
+def get_latest_movies(limit=3):
+    """Return upcoming movie titles from TMDB, or an empty list on failure."""
+    if not TMDB_API_KEY:
+        logger.error("TMDB_API_KEY is not configured")
+        return []
     try:
-        bot.set_chat_title(chat_id=channel_id, title=new_name)
-        print(f"Channel name changed to: {new_name}")
-    except Exception as e:
-        print(f"Failed to change channel name: {e}")
+        response = requests.get(
+            "https://api.themoviedb.org/3/movie/upcoming",
+            params={"api_key": TMDB_API_KEY, "language": TMDB_LANGUAGE, "page": 1},
+            timeout=12,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        return [
+            movie.get("title", "").strip()
+            for movie in payload.get("results", [])
+            if movie.get("title", "").strip()
+        ][:limit]
+    except (requests.RequestException, ValueError):
+        logger.exception("TMDB request failed")
+        return []
 
-# Main function to update the channel name
+
+def change_channel_name(new_name):
+    if not bot or not CHANNEL_ID:
+        logger.error("BOT_TOKEN or CHANNEL_ID is not configured")
+        return False
+    new_name = " ".join(new_name.split())[:128]
+    if not new_name:
+        return False
+    try:
+        bot.set_chat_title(chat_id=CHANNEL_ID, title=new_name)
+        logger.info("Channel title updated")
+        return True
+    except Exception:
+        logger.exception("Telegram could not update the channel title")
+        return False
+
+
 def update_channel_name():
-    movie_names = get_latest_movies()
-    if movie_names:
-        change_channel_name(movie_names)
-    else:
-        print("No upcoming movies found.")
+    titles = get_latest_movies()
+    return change_channel_name(" | ".join(titles)) if titles else False
 
-# Set webhook route for Telegram
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_str = request.get_data().decode('UTF-8')
-        update = telebot.types.Update.de_json(json_str)
-        bot.process_new_updates([update])
-        return 'OK', 200
-    else:
-        return 'Unsupported Media Type', 415
 
-# Bind Flask app to the provided port
-@app.route('/')
+if bot:
+    @bot.message_handler(commands=["start", "help"])
+    def start_command(message):
+        bot.reply_to(
+            message,
+            "Movie Name Changer is online. Use /update to set the channel title "
+            "to the latest upcoming Hindi movie names."
+        )
+
+    @bot.message_handler(commands=["update"])
+    def update_command(message):
+        admin_id = os.getenv("ADMIN_USER_ID")
+        if admin_id and str(message.from_user.id) != admin_id:
+            bot.reply_to(message, "You are not authorized to run this command.")
+            return
+        success = update_channel_name()
+        bot.reply_to(
+            message,
+            "Channel title updated." if success else
+            "Update failed. Check BOT_TOKEN, TMDB_API_KEY, CHANNEL_ID and logs."
+        )
+
+
+@app.get("/")
+@app.get("/api/index")
 def home():
-    return "Bot is running!"
+    return jsonify({
+        "status": "ok",
+        "service": "name-changer",
+        "bot_configured": bool(BOT_TOKEN),
+        "tmdb_configured": bool(TMDB_API_KEY),
+        "channel_configured": bool(CHANNEL_ID),
+    })
 
-# Start Flask app
-if __name__ == "__main__":
-    update_channel_name()  # Update the channel name on startup
-    app.run(host='0.0.0.0', port=port)  # Bind to the environment variable port
+
+@app.route("/webhook", methods=["POST"])
+@app.route("/api/index", methods=["POST"])
+def webhook():
+    if not bot:
+        return jsonify({"error": "BOT_TOKEN is not configured"}), 503
+    if WEBHOOK_SECRET:
+        supplied_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if supplied_secret != WEBHOOK_SECRET:
+            return jsonify({"error": "unauthorized"}), 401
+    if not request.is_json:
+        return jsonify({"error": "expected application/json"}), 415
+    try:
+        update = telebot.types.Update.de_json(request.get_data(as_text=True))
+        bot.process_new_updates([update])
+    except Exception:
+        logger.exception("Failed to process Telegram update")
+        return jsonify({"error": "update processing failed"}), 500
+    return jsonify({"ok": True}), 200
+
+
+@app.get("/health")
+def health():
+    return jsonify({"status": "healthy"}), 200
